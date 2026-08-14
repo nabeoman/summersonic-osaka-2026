@@ -210,31 +210,29 @@ body {
 .banner-viewport {
   flex: 1;
   min-width: 0;
+  position: relative;
   overflow: hidden;
 }
-.banner-track {
-  display: inline-flex;
-  white-space: nowrap;
-}
-.banner-track .seg { display: inline-flex; align-items: baseline; }
-.banner-track .sep { margin: 0 24px; color: var(--live); opacity: .6; }
-.banner .txt, .banner-track { font-size: 14px; color: var(--text-dim); }
+.banner .txt { font-size: 14px; color: var(--text-dim); }
 .banner b { color: var(--text); font-weight: 700; }
-.banner.single .banner-viewport { overflow: visible; }
-.banner.single .banner-track { white-space: normal; display: block; }
-.banner.single .banner-track .seg { display: inline; white-space: normal; }
-.banner.marquee .banner-track {
-  animation-name: banner-scroll;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
+.slot-item {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.5;
 }
-@keyframes banner-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(var(--marquee-dist, -100%)); }
+.banner:not(.single) .slot-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  transition: transform .45s cubic-bezier(.4,0,.2,1), opacity .45s;
+  transform: translateY(0);
+  opacity: 1;
 }
+.banner:not(.single) .slot-item.incoming { transform: translateY(100%); opacity: 0; }
+.banner:not(.single) .slot-item.outgoing { transform: translateY(-100%); opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
-  .banner.marquee .banner-track { animation: none; }
-  .banner-track .seg[aria-hidden="true"] { display: none; }
+  .banner:not(.single) .slot-item { transition: opacity .3s; transform: none !important; }
 }
 
 /* grid */
@@ -464,7 +462,7 @@ body {
 
   <div class="banner" id="banner">
     <span class="dot"></span>
-    <div class="banner-viewport"><div class="banner-track" id="bannerTrack"></div></div>
+    <div class="banner-viewport" id="bannerViewport"></div>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -608,11 +606,77 @@ function tick() {
 }
 
 let lastBannerSig = '';
+let bannerRotateTimer = null;
+let bannerItems = [];
+let bannerIndex = 0;
+
+function bannerItemHtml(u) {
+  return `そろそろ <b>${escapeHtml(u.item[2])}</b> が ${u.stage.name} で ${fmtDur(u.diff)}後にスタート`;
+}
+
+function stopBannerRotation() {
+  if (bannerRotateTimer) { clearInterval(bannerRotateTimer); bannerRotateTimer = null; }
+}
+
+function startBannerRotation() {
+  stopBannerRotation();
+  bannerRotateTimer = setInterval(() => {
+    bannerIndex = (bannerIndex + 1) % bannerItems.length;
+    showBannerSlot(bannerItems[bannerIndex], true);
+  }, 3000);
+}
+
+// スロットのように、現在の項目を上へ抜けさせつつ次の項目を下から出す
+function showBannerSlot(u, animate) {
+  const viewport = document.getElementById('bannerViewport');
+  // 前回分がタブのバックグラウンド化などで消え残っていても、ここで確実に片付ける
+  const prevItems = Array.from(viewport.querySelectorAll('.slot-item'));
+  const next = document.createElement('div');
+  next.className = 'slot-item' + (animate ? ' incoming' : '');
+  next.innerHTML = bannerItemHtml(u);
+  viewport.appendChild(next);
+
+  if (animate && prevItems.length) {
+    next.getBoundingClientRect(); // force reflow so the transition below actually animates
+    // rAFはバックグラウンドタブでスロットリングされ得るのでsetTimeoutで確実に発火させる
+    setTimeout(() => {
+      prevItems.forEach(el => el.classList.add('outgoing'));
+      next.classList.remove('incoming');
+    }, 20);
+    setTimeout(() => { prevItems.forEach(el => el.remove()); }, 520);
+  } else {
+    prevItems.forEach(el => el.remove());
+  }
+}
+
+// 複数件を切り替える際、内容ごとに枠の高さが変わってガタつかないよう最大の高さに固定する
+function measureBannerHeight(viewport, items) {
+  const probe = document.createElement('div');
+  probe.className = 'slot-item';
+  probe.style.cssText = `position:absolute; visibility:hidden; left:0; top:0; width:${viewport.clientWidth}px; transform:none; transition:none;`;
+  viewport.appendChild(probe);
+  let max = 0;
+  for (const u of items) {
+    probe.innerHTML = bannerItemHtml(u);
+    max = Math.max(max, probe.offsetHeight);
+  }
+  viewport.removeChild(probe);
+  return max;
+}
 
 function renderBanner(daySchedule, nowMin, isToday) {
   const banner = document.getElementById('banner');
-  const track = document.getElementById('bannerTrack');
-  if (!isToday) { banner.classList.remove('show', 'marquee', 'single'); lastBannerSig = ''; return; }
+  const viewport = document.getElementById('bannerViewport');
+
+  const clearBanner = () => {
+    banner.classList.remove('show', 'single');
+    stopBannerRotation();
+    viewport.innerHTML = '';
+    viewport.style.height = '';
+    lastBannerSig = '';
+  };
+
+  if (!isToday) { clearBanner(); return; }
 
   const upcoming = [];
   for (const st of DATA.stages) {
@@ -623,35 +687,36 @@ function renderBanner(daySchedule, nowMin, isToday) {
       if (diff <= 15) upcoming.push({ item: up[0], stage: st, diff });
     }
   }
-  if (!upcoming.length) { banner.classList.remove('show', 'marquee', 'single'); lastBannerSig = ''; return; }
+  if (!upcoming.length) { clearBanner(); return; }
   upcoming.sort((a,b) => a.diff - b.diff);
   banner.classList.add('show');
 
-  // 内容（アーティスト・ステージ・分）が変わらない限りDOMを触らず、アニメーションを継続させる
-  const sig = upcoming.map(u => `${u.item[2]}|${u.stage.id}|${u.diff}`).join(',');
-  if (sig === lastBannerSig) return;
-  lastBannerSig = sig;
+  // 顔ぶれ（アーティスト・ステージの組み合わせ）が変わらない限りローテーションはリセットしない。
+  // 「分」はここに含めない — 含めると1分経過するたびに全リセットされ、スロットが落ち着いて回らなくなる。
+  const sig = upcoming.map(u => `${u.item[2]}|${u.stage.id}`).join(',');
+  bannerItems = upcoming;
 
-  const itemText = u => `もうすぐ! <b>${escapeHtml(u.item[2])}</b> が ${u.stage.name} で ${fmtDur(u.diff)}後にスタート`;
+  if (sig === lastBannerSig) {
+    // 顔ぶれは同じ、残り時間の分表示だけ最新化する（アニメーションなし、ローテーションはそのまま継続）
+    const current = viewport.querySelector('.slot-item:not(.incoming):not(.outgoing)');
+    if (current && bannerItems[bannerIndex]) current.innerHTML = bannerItemHtml(bannerItems[bannerIndex]);
+    return;
+  }
+  lastBannerSig = sig;
+  bannerIndex = 0;
+  viewport.innerHTML = '';
 
   if (upcoming.length === 1) {
-    banner.classList.remove('marquee');
+    stopBannerRotation();
     banner.classList.add('single');
-    track.style.cssText = '';
-    track.innerHTML = `<span class="seg">${itemText(upcoming[0])}</span>`;
+    viewport.style.height = '';
+    showBannerSlot(upcoming[0], false);
   } else {
     banner.classList.remove('single');
-    banner.classList.add('marquee');
-    track.style.cssText = '';
-    const segHtml = upcoming.map(u => `<span class="sep">★</span>${itemText(u)}`).join('');
-    track.innerHTML = `<span class="seg">${segHtml}</span><span class="seg" aria-hidden="true">${segHtml}</span>`;
-    requestAnimationFrame(() => {
-      const seg = track.querySelector('.seg');
-      const w = seg.getBoundingClientRect().width;
-      const duration = Math.max(10, w / 55);
-      track.style.setProperty('--marquee-dist', `-${w}px`);
-      track.style.animationDuration = duration + 's';
-    });
+    const maxH = measureBannerHeight(viewport, upcoming);
+    viewport.style.height = maxH + 'px';
+    showBannerSlot(upcoming[0], false);
+    startBannerRotation();
   }
 }
 
