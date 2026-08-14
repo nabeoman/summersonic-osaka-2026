@@ -99,18 +99,14 @@ body {
 /* header */
 .head {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
+  gap: 16px;
+  flex-wrap: nowrap;
   margin-bottom: 20px;
 }
 @media (max-width: 480px) {
-  .head {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .clock { text-align: left; }
+  .head h1 small { font-size: 10.5px; }
 }
 .head h1 {
   font-family: 'Oswald', sans-serif;
@@ -120,6 +116,8 @@ body {
   margin: 0;
   line-height: 1;
   text-wrap: balance;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .head h1 small {
   display: block;
@@ -137,6 +135,7 @@ body {
   color: var(--text-dim);
   text-align: right;
   flex: none;
+  white-space: nowrap;
 }
 .clock b {
   display: block;
@@ -376,7 +375,21 @@ body {
 .full-row.canceled .name { text-decoration: line-through; color: var(--text-faint); }
 .full-row .cancel-tag { color: var(--live); font-size: 11px; font-weight: 700; margin-left: 6px; }
 .full-row.past { opacity: .45; }
-.full-row.playing { background: var(--surface-2); margin: 0 -14px; padding: 8px 14px; border-radius: 6px; }
+.full-row.playing { background: var(--surface-2); }
+.full-row .name { flex: 1; }
+.row-tag {
+  flex: none;
+  margin-left: auto;
+  font-family: 'Oswald', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.row-tag.next { background: var(--stage-color, var(--text-dim)); color: #fff; }
 
 .foot {
   text-align: center;
@@ -458,13 +471,23 @@ function toggleExpand(stageId) {
   tick();
 }
 
-function rowHtml(it, nowMin, isToday) {
+function rowHtml(it, nowMin, isToday, isNext) {
   const [s,e,name,tag] = it;
   const canceled = tag === 'CANCELED';
   const isPast = isToday && !canceled && nowMin >= toMin(e);
   const isPlaying = isToday && !canceled && toMin(s) <= nowMin && nowMin < toMin(e);
   const cls = 'full-row' + (canceled ? ' canceled' : '') + (isPast ? ' past' : '') + (isPlaying ? ' playing' : '');
-  return `<div class="${cls}"><time>${s}-${e}</time><span class="name">${escapeHtml(name)}${canceled ? '<span class="cancel-tag">出演辞退</span>' : (tag ? ` <span class="note" style="margin-left:4px">${escapeHtml(tag)}</span>` : '')}</span></div>`;
+  const tagHtml = canceled ? '<span class="cancel-tag">出演辞退</span>' : (tag ? ` <span class="note" style="margin-left:4px">${escapeHtml(tag)}</span>` : '');
+  const rowTag = isNext ? '<span class="row-tag next">NEXT</span>' : '';
+  return `<div class="${cls}"><time>${s}-${e}</time><span class="name">${escapeHtml(name)}${tagHtml}</span>${rowTag}</div>`;
+}
+
+function nextItemOf(items, nowMin, isToday) {
+  if (!isToday) return null;
+  const r = getStatus(items, nowMin);
+  if (r.status === 'live') return r.next;
+  if (r.status === 'next') return r.item;
+  return null;
 }
 
 function init() {
@@ -632,8 +655,9 @@ function renderGrid(daySchedule, nowMin, isToday) {
     if (expanded) {
       const list = document.createElement('div');
       list.className = 'expand-list';
+      const nextIt = nextItemOf(items, nowMin, isToday);
       list.innerHTML = items.length
-        ? items.map(it => rowHtml(it, nowMin, isToday)).join('')
+        ? items.map(it => rowHtml(it, nowMin, isToday, it === nextIt)).join('')
         : `<div class="full-row"><span class="name">情報なし</span></div>`;
       card.appendChild(list);
     }
@@ -650,12 +674,14 @@ function renderFull(daySchedule, nowMin, isToday) {
     const items = daySchedule[st.id] || [];
     const col = document.createElement('div');
     col.className = 'full-col';
+    col.style.setProperty('--stage-color', st.color);
     const h3 = document.createElement('h3');
     h3.className = 'disp';
     h3.style.background = st.color;
     h3.textContent = st.name;
     col.appendChild(h3);
-    col.insertAdjacentHTML('beforeend', items.map(it => rowHtml(it, nowMin, isToday)).join(''));
+    const nextIt = nextItemOf(items, nowMin, isToday);
+    col.insertAdjacentHTML('beforeend', items.map(it => rowHtml(it, nowMin, isToday, it === nextIt)).join(''));
     full.appendChild(col);
   }
 }
