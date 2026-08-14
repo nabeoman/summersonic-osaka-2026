@@ -704,10 +704,16 @@ function renderGrid(daySchedule, nowMin, isToday) {
     if (expanded) {
       const list = document.createElement('div');
       list.className = 'expand-list';
-      const nextIt = nextItemOf(items, nowMin, isToday);
-      list.innerHTML = items.length
-        ? items.map(it => rowHtml(it, nowMin, isToday, it === nextIt)).join('')
-        : `<div class="full-row"><span class="name">情報なし</span></div>`;
+      // 現在LIVE中・終了済みは下部の「タイムテーブル全体」で見られるので、ここではNEXT以降だけを表示する
+      let visibleItems = items;
+      let nextIt = null;
+      if (isToday) {
+        nextIt = nextItemOf(items, nowMin, isToday);
+        visibleItems = nextIt ? items.slice(items.indexOf(nextIt)) : [];
+      }
+      list.innerHTML = visibleItems.length
+        ? visibleItems.map(it => rowHtml(it, nowMin, isToday, it === nextIt)).join('')
+        : `<div class="full-row"><span class="name">本日のこれ以降のアクトはありません</span></div>`;
       card.appendChild(list);
     }
     card.addEventListener('click', () => toggleExpand(st.id));
