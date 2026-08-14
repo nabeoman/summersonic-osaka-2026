@@ -203,7 +203,7 @@ body {
   white-space: nowrap;
 }
 .banner-track .seg { display: inline-flex; align-items: baseline; }
-.banner-track .sep { margin: 0 20px; color: var(--live); opacity: .6; }
+.banner-track .sep { margin: 0 24px; color: var(--live); opacity: .6; }
 .banner .txt, .banner-track { font-size: 14px; color: var(--text-dim); }
 .banner b { color: var(--text); font-weight: 700; }
 .banner.marquee .banner-track {
@@ -608,8 +608,8 @@ function renderBanner(daySchedule, nowMin, isToday) {
   lastBannerSig = sig;
 
   const segHtml = upcoming.map(u =>
-    `もうすぐ! <b>${escapeHtml(u.item[2])}</b> が ${u.stage.name} で ${fmtDur(u.diff)}後にスタート`
-  ).join('<span class="sep">★</span>');
+    `<span class="sep">★</span>もうすぐ! <b>${escapeHtml(u.item[2])}</b> が ${u.stage.name} で ${fmtDur(u.diff)}後にスタート`
+  ).join('');
 
   if (upcoming.length === 1) {
     banner.classList.remove('marquee');
