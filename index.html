@@ -105,10 +105,17 @@ body {
   flex-wrap: wrap;
   margin-bottom: 20px;
 }
+@media (max-width: 480px) {
+  .head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .clock { text-align: left; }
+}
 .head h1 {
   font-family: 'Oswald', sans-serif;
   font-weight: 700;
-  font-size: clamp(28px, 5vw, 42px);
+  font-size: clamp(20px, 4.2vw, 34px);
   letter-spacing: .01em;
   margin: 0;
   line-height: 1;
@@ -126,13 +133,14 @@ body {
 .clock {
   font-family: 'Oswald', sans-serif;
   font-variant-numeric: tabular-nums;
-  font-size: 20px;
+  font-size: 13px;
   color: var(--text-dim);
   text-align: right;
+  flex: none;
 }
 .clock b {
   display: block;
-  font-size: 30px;
+  font-size: clamp(18px, 4.5vw, 22px);
   color: var(--text);
   font-weight: 600;
 }
