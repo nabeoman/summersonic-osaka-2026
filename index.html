@@ -414,6 +414,14 @@ body {
   color: var(--text-dim);
 }
 .row-tag.next { background: var(--stage-color, var(--text-dim)); color: #fff; }
+.row-dot {
+  flex: none;
+  margin-left: auto;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 0 4px var(--live-soft);
+  animation: pulse 1.6s ease-in-out infinite;
+}
 
 .foot {
   text-align: center;
@@ -502,7 +510,7 @@ function rowHtml(it, nowMin, isToday, isNext) {
   const isPlaying = isToday && !canceled && toMin(s) <= nowMin && nowMin < toMin(e);
   const cls = 'full-row' + (canceled ? ' canceled' : '') + (isPast ? ' past' : '') + (isPlaying ? ' playing' : '');
   const tagHtml = canceled ? '<span class="cancel-tag">出演辞退</span>' : (tag ? ` <span class="note" style="margin-left:4px">${escapeHtml(tag)}</span>` : '');
-  const rowTag = isNext ? '<span class="row-tag next">NEXT</span>' : '';
+  const rowTag = isNext ? '<span class="row-tag next">NEXT</span>' : (isPlaying ? '<span class="row-dot"></span>' : '');
   return `<div class="${cls}"><time>${s}-${e}</time><span class="name">${escapeHtml(name)}${tagHtml}</span>${rowTag}</div>`;
 }
 
