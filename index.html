@@ -193,8 +193,32 @@ body {
   animation: pulse 1.6s ease-in-out infinite;
 }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-.banner .txt { font-size: 14px; color: var(--text-dim); }
-.banner .txt b { color: var(--text); font-weight: 700; }
+.banner-viewport {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.banner-track {
+  display: inline-flex;
+  white-space: nowrap;
+}
+.banner-track .seg { display: inline-flex; align-items: baseline; }
+.banner-track .sep { margin: 0 20px; color: var(--live); opacity: .6; }
+.banner .txt, .banner-track { font-size: 14px; color: var(--text-dim); }
+.banner b { color: var(--text); font-weight: 700; }
+.banner.marquee .banner-track {
+  animation-name: banner-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes banner-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--marquee-dist, -100%)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .banner.marquee .banner-track { animation: none; }
+  .banner-track .seg[aria-hidden="true"] { display: none; }
+}
 
 /* grid */
 .grid {
@@ -415,7 +439,7 @@ body {
 
   <div class="banner" id="banner">
     <span class="dot"></span>
-    <span class="txt" id="bannerTxt"></span>
+    <div class="banner-viewport"><div class="banner-track" id="bannerTrack"></div></div>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -558,25 +582,50 @@ function tick() {
   });
 }
 
+let lastBannerSig = '';
+
 function renderBanner(daySchedule, nowMin, isToday) {
   const banner = document.getElementById('banner');
-  if (!isToday) { banner.classList.remove('show'); return; }
-  let soonest = null, soonestStage = null, soonestDiff = Infinity;
+  const track = document.getElementById('bannerTrack');
+  if (!isToday) { banner.classList.remove('show', 'marquee'); lastBannerSig = ''; return; }
+
+  const upcoming = [];
   for (const st of DATA.stages) {
     const items = (daySchedule[st.id] || []).filter(it => it[3] !== 'CANCELED');
-    const up = items.filter(it => toMin(it[0]) > nowMin);
+    const up = items.filter(it => toMin(it[0]) > nowMin).sort((a,b) => toMin(a[0]) - toMin(b[0]));
     if (up.length) {
-      up.sort((a,b) => toMin(a[0]) - toMin(b[0]));
-      const diff = toMin(up[0][0]) - nowMin;
-      if (diff < soonestDiff) { soonestDiff = diff; soonest = up[0]; soonestStage = st; }
+      const diff = Math.round(toMin(up[0][0]) - nowMin);
+      if (diff <= 15) upcoming.push({ item: up[0], stage: st, diff });
     }
   }
-  if (soonest && soonestDiff <= 15) {
-    banner.classList.add('show');
-    document.getElementById('bannerTxt').innerHTML =
-      `もうすぐ! <b>${escapeHtml(soonest[2])}</b> が ${soonestStage.name} で ${fmtDur(soonestDiff)}後にスタート`;
+  if (!upcoming.length) { banner.classList.remove('show', 'marquee'); lastBannerSig = ''; return; }
+  upcoming.sort((a,b) => a.diff - b.diff);
+  banner.classList.add('show');
+
+  // 内容（アーティスト・ステージ・分）が変わらない限りDOMを触らず、アニメーションを継続させる
+  const sig = upcoming.map(u => `${u.item[2]}|${u.stage.id}|${u.diff}`).join(',');
+  if (sig === lastBannerSig) return;
+  lastBannerSig = sig;
+
+  const segHtml = upcoming.map(u =>
+    `もうすぐ! <b>${escapeHtml(u.item[2])}</b> が ${u.stage.name} で ${fmtDur(u.diff)}後にスタート`
+  ).join('<span class="sep">★</span>');
+
+  if (upcoming.length === 1) {
+    banner.classList.remove('marquee');
+    track.style.cssText = '';
+    track.innerHTML = `<span class="seg">${segHtml}</span>`;
   } else {
-    banner.classList.remove('show');
+    banner.classList.add('marquee');
+    track.style.cssText = '';
+    track.innerHTML = `<span class="seg">${segHtml}</span><span class="seg" aria-hidden="true">${segHtml}</span>`;
+    requestAnimationFrame(() => {
+      const seg = track.querySelector('.seg');
+      const w = seg.getBoundingClientRect().width;
+      const duration = Math.max(10, w / 55);
+      track.style.setProperty('--marquee-dist', `-${w}px`);
+      track.style.animationDuration = duration + 's';
+    });
   }
 }
 
